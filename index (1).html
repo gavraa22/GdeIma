@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GdeIma</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #12151B;
+    --surface: #1B1F27;
+    --surface-raised: #232833;
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.16);
+    --text-primary: #F2F0E9;
+    --text-secondary: #9B9C9E;
+    --text-muted: #6B6D72;
+    --accent: #E8A33D;
+    --accent-dim: #7A5A26;
+    --teal: #3FB8AF;
+    --teal-dim: #1F5E58;
+    --red: #E2574C;
+    --radius: 18px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body{ display:flex; justify-content:center; padding: 28px 16px 60px; }
+  .shell{ width:100%; max-width: 460px; }
+  header{ text-align:center; margin-bottom: 28px; }
+  .eye-mark{ width: 44px; height:44px; margin: 0 auto 14px; }
+  .eye-mark svg{ width:100%; height:100%; display:block; }
+  h1{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size: 26px; letter-spacing: -0.01em; }
+  .tagline{ color: var(--text-secondary); font-size: 14px; margin-top: 6px; line-height:1.5; }
+
+  .frame{
+    position:relative; width:100%; aspect-ratio: 1 / 1;
+    background: var(--surface); border-radius: var(--radius);
+    overflow:hidden; display:flex; align-items:center; justify-content:center;
+  }
+  .frame img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .frame .placeholder{ display:flex; flex-direction:column; align-items:center; gap:10px; color: var(--text-muted); padding: 20px; text-align:center; }
+  .frame .placeholder svg{ width:52px; height:52px; opacity:0.5; }
+  .frame .placeholder span{ font-size:13px; }
+  .corner{ position:absolute; width:28px; height:28px; pointer-events:none; }
+  .corner::before, .corner::after{ content:''; position:absolute; background: var(--accent); }
+  .corner.tl{ top:14px; left:14px; } .corner.tr{ top:14px; right:14px; }
+  .corner.bl{ bottom:14px; left:14px; } .corner.br{ bottom:14px; right:14px; }
+  .corner.tl::before, .corner.tr::before, .corner.bl::before, .corner.br::before{ width:3px; height:22px; }
+  .corner.tl::after, .corner.tr::after, .corner.bl::after, .corner.br::after{ width:22px; height:3px; }
+  .corner.tl::before{ top:0; left:0; } .corner.tl::after{ top:0; left:0; }
+  .corner.tr::before{ top:0; right:0; } .corner.tr::after{ top:0; right:0; }
+  .corner.bl::before{ bottom:0; left:0; } .corner.bl::after{ bottom:0; left:0; }
+  .corner.br::before{ bottom:0; right:0; } .corner.br::after{ bottom:0; right:0; }
+
+  .scanline{ position:absolute; left:0; right:0; height:2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); top:0; opacity:0; }
+  .scanline.active{ animation: sweep 1.6s ease-in-out infinite; opacity:1; }
+  @keyframes sweep{ 0%{ top:6%; } 50%{ top:94%; } 100%{ top:6%; } }
+
+  .capture-row{ display:flex; justify-content:center; margin-top: 22px; }
+  .shutter{
+    width:72px; height:72px; border-radius:50%; background: var(--accent);
+    border: 4px solid var(--surface-raised); box-shadow: 0 0 0 2px var(--accent-dim);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; transition: transform 0.15s ease;
+  }
+  .shutter:active{ transform: scale(0.93); }
+  .shutter svg{ width:28px; height:28px; color: #12151B; }
+  #file-input{ display:none; }
+
+  .status-text{ text-align:center; color: var(--text-secondary); font-size: 13.5px; margin-top: 14px; min-height: 18px; }
+
+  .results{ margin-top: 30px; display:none; }
+  .results.visible{ display:block; }
+
+  .id-card{ background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+  .id-eyebrow{ font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color: var(--teal); font-weight:600; margin-bottom:6px; }
+  .id-name{ font-family:'Space Grotesk', sans-serif; font-size: 24px; font-weight:600; }
+  .id-name-en{ font-size:13px; color: var(--text-muted); margin-top:2px; }
+  .id-category{ display:inline-block; margin-top:10px; padding: 4px 12px; border-radius: 100px; background: var(--teal-dim); color: #BEEAE6; font-size:12px; font-weight:500; }
+
+  .search-row{ margin-top:18px; display:flex; gap:8px; }
+  .search-row input[type="text"]{ flex:1; background: var(--surface-raised); border:1px solid var(--border); border-radius:10px; color: var(--text-primary); font-family:'Inter',sans-serif; font-size:14px; padding: 10px 12px; }
+  .search-row input[type="text"]:focus{ outline:none; border-color: var(--accent); }
+  .search-row button{ background: var(--surface-raised); border: 1px solid var(--border-strong); color: var(--text-primary); border-radius:10px; padding: 0 16px; font-size:13px; font-weight:500; cursor:pointer; }
+
+  .location-note{ margin-top:12px; font-size:12.5px; color: var(--text-muted); display:flex; align-items:center; gap:6px; }
+  .location-note svg{ width:14px; height:14px; flex-shrink:0; }
+
+  .city-row{ margin-top:10px; display:none; gap:8px; }
+  .city-row.visible{ display:flex; }
+  .city-row input{ flex:1; background: var(--surface-raised); border:1px solid var(--border); border-radius:10px; color: var(--text-primary); font-family:'Inter',sans-serif; font-size:14px; padding: 10px 12px; }
+  .city-row button{ background: var(--accent); border:none; color:#12151B; font-weight:600; border-radius:10px; padding: 0 16px; font-size:13px; cursor:pointer; }
+
+  .map-frame{ position:relative; margin-top: 18px; border-radius: var(--radius); overflow:hidden; background: var(--surface); border:1px solid var(--border); }
+  .map-frame iframe{ width:100%; height: 240px; border:0; display:block; filter: grayscale(0.15) contrast(1.05); }
+  .map-frame .corner::before, .map-frame .corner::after{ background: var(--teal); }
+  .map-frame .corner{ width:22px; height:22px; }
+  .map-frame .corner.tl, .map-frame .corner.tr{ top:10px; }
+  .map-frame .corner.bl, .map-frame .corner.br{ bottom:10px; }
+  .map-frame .corner.tl, .map-frame .corner.bl{ left:10px; }
+  .map-frame .corner.tr, .map-frame .corner.br{ right:10px; }
+
+  .store-list{ margin-top:16px; display:flex; flex-direction:column; gap:10px; }
+  .store-card{ background: var(--surface); border:1px solid var(--border); border-radius:14px; padding: 12px 14px; text-decoration:none; color: var(--text-primary); display:block; }
+  .store-card:active{ transform: scale(0.99); }
+  .store-name{ font-weight:600; font-size:14.5px; }
+  .store-address{ font-size:12.5px; color: var(--text-secondary); margin-top:3px; }
+  .store-meta{ display:flex; gap:10px; margin-top:6px; font-size:12px; color: var(--text-muted); }
+  .store-meta .rating{ color: var(--accent); }
+  .store-meta .open{ color: var(--teal); }
+  .store-meta .closed{ color: var(--red); }
+
+  .actions-row{ display:flex; gap:10px; margin-top:16px; }
+  .btn{ flex:1; display:flex; align-items:center; justify-content:center; gap:8px; padding: 13px 14px; border-radius: 12px; font-size:14px; font-weight:600; cursor:pointer; border:none; text-decoration:none; }
+  .btn svg{ width:17px; height:17px; }
+  .btn-secondary{ background: transparent; border: 1px solid var(--border-strong); color: var(--text-primary); width:100%; }
+
+  .error-box{ display:none; margin-top:18px; background: rgba(226,87,76,0.08); border:1px solid rgba(226,87,76,0.3); color:#F3B3AD; border-radius:12px; padding: 12px 14px; font-size:13px; line-height:1.5; }
+  .error-box.visible{ display:block; }
+
+  footer{ text-align:center; margin-top: 30px; color: var(--text-muted); font-size:11.5px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header>
+    <div class="eye-mark">
+      <svg viewBox="0 0 44 44" fill="none">
+        <circle cx="22" cy="22" r="20" stroke="#E8A33D" stroke-width="1.5"/>
+        <path d="M6 22C6 22 12 12 22 12C32 12 38 22 38 22C38 22 32 32 22 32C12 32 6 22 6 22Z" stroke="#E8A33D" stroke-width="1.5"/>
+        <circle cx="22" cy="22" r="6" fill="#E8A33D"/>
+      </svg>
+    </div>
+    <h1>GdeIma</h1>
+    <p class="tagline">Slikaj predmet — pronađi gde ga možeš kupiti u tvom gradu.</p>
+  </header>
+
+  <div class="frame" id="frame">
+    <div class="placeholder" id="placeholder">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 9a2 2 0 012-2h1.5l1-1.5h9l1 1.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+        <circle cx="12" cy="13.5" r="3.5"/>
+      </svg>
+      <span>Dodirni dugme ispod da slikaš predmet</span>
+    </div>
+    <img id="preview" style="display:none;">
+    <div class="scanline" id="scanline"></div>
+    <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+  </div>
+
+  <div class="capture-row">
+    <label class="shutter" for="file-input">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 9a2 2 0 012-2h1.5l1-1.5h9l1 1.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+        <circle cx="12" cy="13.5" r="3.5"/>
+      </svg>
+    </label>
+    <input type="file" id="file-input" accept="image/*" capture="environment">
+  </div>
+
+  <p class="status-text" id="status-text"></p>
+  <div class="error-box" id="error-box"></div>
+
+  <div class="results" id="results">
+    <div class="id-card">
+      <div class="id-eyebrow">Prepoznato</div>
+      <div class="id-name" id="id-name">—</div>
+      <div class="id-name-en" id="id-name-en"></div>
+      <div class="id-category" id="id-category"></div>
+
+      <div class="search-row">
+        <input type="text" id="search-input" placeholder="Izmeni pojam za pretragu">
+        <button id="update-search-btn">Ažuriraj</button>
+      </div>
+
+      <div class="location-note" id="location-note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z"/>
+          <circle cx="12" cy="9" r="2.5"/>
+        </svg>
+        <span id="location-text">Tražim tvoju lokaciju…</span>
+      </div>
+      <div class="city-row" id="city-row">
+        <input type="text" id="city-input" placeholder="Unesi svoj grad">
+        <button id="city-confirm-btn">Potvrdi</button>
+      </div>
+    </div>
+
+    <div class="map-frame" id="map-frame" style="display:none;">
+      <iframe id="map-iframe" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+      <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+    </div>
+
+    <div class="store-list" id="store-list"></div>
+
+    <div class="actions-row">
+      <button class="btn btn-secondary" id="reset-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 019-9 9.75 9.75 0 016.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 01-9 9 9.75 9.75 0 01-6.74-2.74L3 16m0 5v-5h5"/></svg>
+        Skeniraj ponovo
+      </button>
+    </div>
+  </div>
+
+  <footer>
+    Fotografija se šalje Claude AI modelu radi prepoznavanja predmeta i ne čuva se trajno.<br>
+    Podaci o prodavnicama dolaze sa Google Maps-a.
+  </footer>
+
+</div>
+
+<script>
+  const fileInput = document.getElementById('file-input');
+  const preview = document.getElementById('preview');
+  const placeholder = document.getElementById('placeholder');
+  const scanline = document.getElementById('scanline');
+  const statusText = document.getElementById('status-text');
+  const errorBox = document.getElementById('error-box');
+  const results = document.getElementById('results');
+
+  const idName = document.getElementById('id-name');
+  const idNameEn = document.getElementById('id-name-en');
+  const idCategory = document.getElementById('id-category');
+  const searchInput = document.getElementById('search-input');
+  const updateSearchBtn = document.getElementById('update-search-btn');
+
+  const locationNote = document.getElementById('location-note');
+  const locationText = document.getElementById('location-text');
+  const cityRow = document.getElementById('city-row');
+  const cityInput = document.getElementById('city-input');
+  const cityConfirmBtn = document.getElementById('city-confirm-btn');
+
+  const mapFrame = document.getElementById('map-frame');
+  const mapIframe = document.getElementById('map-iframe');
+  const storeList = document.getElementById('store-list');
+  const resetBtn = document.getElementById('reset-btn');
+
+  let currentLat = null;
+  let currentLng = null;
+  let currentCity = '';
+
+  function showError(msg){ errorBox.textContent = msg; errorBox.classList.add('visible'); }
+  function clearError(){ errorBox.classList.remove('visible'); errorBox.textContent = ''; }
+  function setStatus(msg){ statusText.textContent = msg; }
+
+  fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    clearError();
+    results.classList.remove('visible');
+    mapFrame.style.display = 'none';
+    storeList.innerHTML = '';
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      preview.src = dataUrl;
+      preview.style.display = 'block';
+      placeholder.style.display = 'none';
+      scanline.classList.add('active');
+      setStatus('Prepoznajem predmet…');
+
+      const base64 = dataUrl.split(',')[1];
+      const mediaType = file.type || 'image/jpeg';
+
+      try{
+        const identified = await identifyObject(base64, mediaType);
+        scanline.classList.remove('active');
+        setStatus('');
+        showResults(identified);
+        locateAndSearch(identified.search_terms_sr || identified.name_sr);
+      }catch(err){
+        scanline.classList.remove('active');
+        setStatus('');
+        showError(err.message || 'Nisam uspeo da prepoznam predmet. Pokušaj ponovo.');
+      }
+    };
+    reader.onerror = () => showError('Nisam uspeo da učitam sliku sa uređaja.');
+    reader.readAsDataURL(file);
+  });
+
+  async function identifyObject(base64, mediaType){
+    const response = await fetch('/api/identify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: base64, mediaType })
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || 'Greška servera.');
+    if(!data.name_sr) throw new Error('Model nije prepoznao predmet jasno. Probaj jasniju sliku.');
+    return data;
+  }
+
+  function showResults(identified){
+    idName.textContent = identified.name_sr || '—';
+    idNameEn.textContent = identified.name_en || '';
+    idCategory.textContent = identified.category || 'predmet';
+    searchInput.value = identified.search_terms_sr || identified.name_sr || '';
+    results.classList.add('visible');
+  }
+
+  function locateAndSearch(searchTerm){
+    locationText.textContent = 'Tražim tvoju lokaciju…';
+    cityRow.classList.remove('visible');
+
+    if(!('geolocation' in navigator)){
+      locationText.textContent = 'Lokacija nije dostupna — unesi svoj grad ručno.';
+      cityRow.classList.add('visible');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        currentLat = pos.coords.latitude;
+        currentLng = pos.coords.longitude;
+        currentCity = '';
+        locationText.textContent = 'Koristim tvoju trenutnu lokaciju.';
+        searchNearby(searchTerm);
+      },
+      () => {
+        locationText.textContent = 'Pristup lokaciji odbijen — unesi svoj grad ručno.';
+        cityRow.classList.add('visible');
+      },
+      { timeout: 6000 }
+    );
+  }
+
+  async function searchNearby(searchTerm){
+    setStatus('Tražim prodavnice u okolini…');
+    try{
+      const response = await fetch('/api/nearby', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: searchTerm,
+          lat: currentLat,
+          lng: currentLng,
+          cityFallback: currentCity || undefined
+        })
+      });
+      const data = await response.json();
+      setStatus('');
+      if(!response.ok) throw new Error(data.error || 'Greška pri pretrazi.');
+
+      const embedQuery = encodeURIComponent(data.usedQuery || searchTerm);
+      mapIframe.src = 'https://www.google.com/maps?q=' + embedQuery + '&output=embed';
+      mapFrame.style.display = 'block';
+
+      renderStoreList(data.places || []);
+    }catch(err){
+      setStatus('');
+      showError(err.message || 'Nisam uspeo da pronađem prodavnice.');
+    }
+  }
+
+  function renderStoreList(places){
+    storeList.innerHTML = '';
+    if(places.length === 0){
+      const p = document.createElement('p');
+      p.style.color = 'var(--text-muted)';
+      p.style.fontSize = '13px';
+      p.style.textAlign = 'center';
+      p.textContent = 'Nema rezultata za ovu pretragu u tvojoj okolini.';
+      storeList.appendChild(p);
+      return;
+    }
+    places.forEach(place => {
+      const a = document.createElement('a');
+      a.className = 'store-card';
+      a.href = place.mapsUri || '#';
+      a.target = '_blank';
+      a.rel = 'noopener';
+
+      const name = document.createElement('div');
+      name.className = 'store-name';
+      name.textContent = place.name;
+
+      const addr = document.createElement('div');
+      addr.className = 'store-address';
+      addr.textContent = place.address;
+
+      const meta = document.createElement('div');
+      meta.className = 'store-meta';
+      if(place.rating){
+        const r = document.createElement('span');
+        r.className = 'rating';
+        r.textContent = '★ ' + place.rating;
+        meta.appendChild(r);
+      }
+      if(place.openNow !== null && place.openNow !== undefined){
+        const o = document.createElement('span');
+        o.className = place.openNow ? 'open' : 'closed';
+        o.textContent = place.openNow ? 'Otvoreno sada' : 'Zatvoreno';
+        meta.appendChild(o);
+      }
+
+      a.appendChild(name);
+      a.appendChild(addr);
+      a.appendChild(meta);
+      storeList.appendChild(a);
+    });
+  }
+
+  updateSearchBtn.addEventListener('click', () => {
+    const term = searchInput.value.trim();
+    if(!term) return;
+    if(currentLat || currentCity){
+      searchNearby(term);
+    }else{
+      showError('Prvo unesi svoj grad da bih mogao da pretražim mapu.');
+    }
+  });
+
+  cityConfirmBtn.addEventListener('click', () => {
+    const city = cityInput.value.trim();
+    if(!city) return;
+    currentCity = city;
+    currentLat = null;
+    currentLng = null;
+    locationText.textContent = 'Grad: ' + city;
+    cityRow.classList.remove('visible');
+    searchNearby(searchInput.value.trim() || idName.textContent);
+  });
+
+  cityInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') cityConfirmBtn.click(); });
+
+  resetBtn.addEventListener('click', () => {
+    fileInput.value = '';
+    preview.style.display = 'none';
+    placeholder.style.display = 'flex';
+    results.classList.remove('visible');
+    mapFrame.style.display = 'none';
+    cityRow.classList.remove('visible');
+    storeList.innerHTML = '';
+    clearError();
+    setStatus('');
+    currentLat = null; currentLng = null; currentCity = '';
+  });
+</script>
+</body>
+</html>
