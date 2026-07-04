@@ -21,24 +21,33 @@ app.post('/api/identify', async (req, res) => {
       return res.status(500).json({ error: 'Server nije podesen: nedostaje GEMINI_API_KEY (proveri .env fajl ili podesavanja hostinga).' });
     }
 
-    const prompt = 'Na slici se nalazi neki svakodnevni predmet (moze biti bilo sta: daljinski upravljac, tastatura, ceslja, solja, alat, odevni predmet, kuhinjski pribor, elektronika, obuca...). Identifikuj GLAVNI predmet, cak i ako je delimicno zaklonjen ili nije idealno uslikan. Odgovori ISKLJUCIVO validnim JSON objektom u sledecem obliku: {"name_sr": "kratak naziv predmeta na srpskom", "name_en": "short name in English", "category": "kategorija na srpskom", "search_terms_sr": "kratka fraza na srpskom pogodna za pretragu prodavnica koje prodaju taj predmet, npr. prodavnica sportske opreme ili prodavnica kucnih aparata"}';
+    const prompt = 'Na slici se nalazi neki svakodnevni predmet (moze biti bilo sta: daljinski upravljac, tastatura, ceslja, solja, alat, odevni predmet, kuhinjski pribor, elektronika, obuca...). Identifikuj GLAVNI predmet, cak i ako je delimicno zaklonjen ili nije idealno uslikan.';
 
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-goog-api-key': GEMINI_API_KEY
       },
       body: JSON.stringify({
-        contents: [{
-          role: 'user',
-          parts: [
-            { inline_data: { mime_type: mediaType || 'image/jpeg', data: imageBase64 } },
-            { text: prompt }
-          ]
-        }],
-        generationConfig: {
-          response_mime_type: 'application/json'
+        model: 'gemini-3.5-flash',
+        input: [
+          { type: 'text', text: prompt },
+          { type: 'image', data: imageBase64, mime_type: mediaType || 'image/jpeg' }
+        ],
+        response_format: {
+          type: 'text',
+          mime_type: 'application/json',
+          schema: {
+            type: 'object',
+            properties: {
+              name_sr: { type: 'string', description: 'kratak naziv predmeta na srpskom' },
+              name_en: { type: 'string', description: 'short name in English' },
+              category: { type: 'string', description: 'kategorija na srpskom' },
+              search_terms_sr: { type: 'string', description: 'kratka fraza na srpskom pogodna za pretragu prodavnica koje prodaju taj predmet' }
+            },
+            required: ['name_sr', 'name_en', 'category', 'search_terms_sr']
+          }
         }
       })
     });
@@ -49,16 +58,28 @@ app.post('/api/identify', async (req, res) => {
     }
 
     const data = await response.json();
-    const candidate = (data.candidates || [])[0];
-    const textPart = candidate && candidate.content && candidate.content.parts
-      ? candidate.content.parts.find(p => p.text)
-      : null;
 
-    if (!textPart || !textPart.text) {
+    function findOutputText(obj) {
+      if (!obj || typeof obj !== 'object') return null;
+      if (typeof obj.output_text === 'string') return obj.output_text;
+      if (obj.output && typeof obj.output.text === 'string') return obj.output.text;
+      for (const key of Object.keys(obj)) {
+        const val = obj[key];
+        if (typeof val === 'string' && key === 'text' && val.trim().startsWith('{')) return val;
+        if (typeof val === 'object') {
+          const found = findOutputText(val);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+
+    const rawText = findOutputText(data);
+    if (!rawText) {
       return res.status(502).json({ error: 'Prazan odgovor od modela.' });
     }
 
-    let cleaned = textPart.text.replace(/```json|```/g, '').trim();
+    let cleaned = rawText.replace(/```json|```/g, '').trim();
     const first = cleaned.indexOf('{');
     const last = cleaned.lastIndexOf('}');
     if (first !== -1 && last !== -1) cleaned = cleaned.slice(first, last + 1);
