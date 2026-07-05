@@ -199,9 +199,11 @@
       <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
     </div>
 
-    <div class="store-list" id="store-list"></div>
-
     <div class="actions-row">
+      <a class="btn btn-primary" id="open-maps-fallback" href="#" target="_blank" rel="noopener" style="display:none; background: var(--teal); color:#08201D;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3zm0 0V3m6 18V6"/></svg>
+        Otvori u Google Maps
+      </a>
       <button class="btn btn-secondary" id="reset-btn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 019-9 9.75 9.75 0 016.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 01-9 9 9.75 9.75 0 01-6.74-2.74L3 16m0 5v-5h5"/></svg>
         Skeniraj ponovo
@@ -239,7 +241,7 @@
 
   const mapFrame = document.getElementById('map-frame');
   const mapIframe = document.getElementById('map-iframe');
-  const storeList = document.getElementById('store-list');
+  const openMapsFallback = document.getElementById('open-maps-fallback');
   const resetBtn = document.getElementById('reset-btn');
 
   let currentLat = null;
@@ -256,7 +258,7 @@
     clearError();
     results.classList.remove('visible');
     mapFrame.style.display = 'none';
-    storeList.innerHTML = '';
+    openMapsFallback.style.display = 'none';
 
     const reader = new FileReader();
     reader.onload = async () => {
@@ -333,81 +335,27 @@
   }
 
   async function searchNearby(searchTerm){
-    setStatus('Tražim prodavnice u okolini…');
+    setStatus('');
+    clearError();
     try{
-      const response = await fetch('/api/nearby', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: searchTerm,
-          lat: currentLat,
-          lng: currentLng,
-          cityFallback: currentCity || undefined
-        })
-      });
-      const data = await response.json();
-      setStatus('');
-      if(!response.ok) throw new Error(data.error || 'Greška pri pretrazi.');
+      const locationText = currentCity || (currentLat + ',' + currentLng);
+      const fullQuery = searchTerm + ' blizu ' + locationText;
+      const embedQuery = encodeURIComponent(fullQuery);
 
-      const embedQuery = encodeURIComponent(data.usedQuery || searchTerm);
+      // Mapa se ucitava direktno u browseru (klijentski), bez poziva naseg servera,
+      // tako da Google Places server-side blokade na hosting IP-jevima ovde ne smetaju.
       mapIframe.src = 'https://www.google.com/maps?q=' + embedQuery + '&output=embed';
       mapFrame.style.display = 'block';
 
-      renderStoreList(data.places || []);
+      renderStoreList([]);
+      openMapsFallback.href = 'https://www.google.com/maps/search/?api=1&query=' + embedQuery;
+      openMapsFallback.style.display = 'flex';
     }catch(err){
-      setStatus('');
-      showError(err.message || 'Nisam uspeo da pronađem prodavnice.');
+      showError(err.message || 'Nisam uspeo da prikazem mapu.');
     }
   }
 
-  function renderStoreList(places){
-    storeList.innerHTML = '';
-    if(places.length === 0){
-      const p = document.createElement('p');
-      p.style.color = 'var(--text-muted)';
-      p.style.fontSize = '13px';
-      p.style.textAlign = 'center';
-      p.textContent = 'Nema rezultata za ovu pretragu u tvojoj okolini.';
-      storeList.appendChild(p);
-      return;
-    }
-    places.forEach(place => {
-      const a = document.createElement('a');
-      a.className = 'store-card';
-      a.href = place.mapsUri || '#';
-      a.target = '_blank';
-      a.rel = 'noopener';
-
-      const name = document.createElement('div');
-      name.className = 'store-name';
-      name.textContent = place.name;
-
-      const addr = document.createElement('div');
-      addr.className = 'store-address';
-      addr.textContent = place.address;
-
-      const meta = document.createElement('div');
-      meta.className = 'store-meta';
-      if(place.rating){
-        const r = document.createElement('span');
-        r.className = 'rating';
-        r.textContent = '★ ' + place.rating;
-        meta.appendChild(r);
-      }
-      if(place.openNow !== null && place.openNow !== undefined){
-        const o = document.createElement('span');
-        o.className = place.openNow ? 'open' : 'closed';
-        o.textContent = place.openNow ? 'Otvoreno sada' : 'Zatvoreno';
-        meta.appendChild(o);
-      }
-
-      a.appendChild(name);
-      a.appendChild(addr);
-      a.appendChild(meta);
-      storeList.appendChild(a);
-    });
-  }
-
+  
   updateSearchBtn.addEventListener('click', () => {
     const term = searchInput.value.trim();
     if(!term) return;
@@ -438,7 +386,7 @@
     results.classList.remove('visible');
     mapFrame.style.display = 'none';
     cityRow.classList.remove('visible');
-    storeList.innerHTML = '';
+    openMapsFallback.style.display = 'none';
     clearError();
     setStatus('');
     currentLat = null; currentLng = null; currentCity = '';
