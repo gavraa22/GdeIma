@@ -23,29 +23,49 @@ app.post('/api/identify', async (req, res) => {
 
     const prompt = 'Na slici se nalazi neki svakodnevni predmet (moze biti bilo sta: daljinski upravljac, tastatura, ceslja, solja, alat, odevni predmet, kuhinjski pribor, elektronika, obuca...). Identifikuj GLAVNI predmet, cak i ako je delimicno zaklonjen ili nije idealno uslikan. Odgovori ISKLJUCIVO validnim JSON objektom, bez markdown ograda i bez ikakvog teksta pre ili posle JSON-a, u sledecem obliku: {"name_sr": "kratak naziv predmeta na srpskom", "name_en": "short name in English", "category": "kategorija na srpskom", "search_terms_sr": "kratka fraza na srpskom pogodna za pretragu prodavnica koje prodaju taj predmet"}';
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + OPENROUTER_API_KEY,
-        'HTTP-Referer': 'https://gdeima.onrender.com',
-        'X-Title': 'GdeIma'
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-4-maverick:free',
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: 'data:' + (mediaType || 'image/jpeg') + ';base64,' + imageBase64 } }
-          ]
-        }]
-      })
-    });
+    // Lista besplatnih modela da probamo redom - free lista se cesto menja na OpenRouter-u,
+    // pa ako jedan vise nije besplatan/dostupan, automatski prelazimo na sledeci.
+    const candidateModels = [
+      'qwen/qwen2.5-vl-72b-instruct:free',
+      'meta-llama/llama-4-scout:free',
+      'google/gemma-3-27b-it:free',
+      'meta-llama/llama-3.2-11b-vision-instruct:free',
+      'meta-llama/llama-4-maverick:free'
+    ];
+
+    let response = null;
+    let lastErrText = '';
+
+    for (const model of candidateModels) {
+      response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + OPENROUTER_API_KEY,
+          'HTTP-Referer': 'https://gdeima.onrender.com',
+          'X-Title': 'GdeIma'
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: 'data:' + (mediaType || 'image/jpeg') + ';base64,' + imageBase64 } }
+            ]
+          }]
+        })
+      });
+
+      if (response.ok) break;
+
+      lastErrText = await response.text();
+      // Ako je model nedostupan (404) ili vise nije besplatan, probaj sledeci u listi
+      if (response.status !== 404 && response.status !== 400) break;
+    }
 
     if (!response.ok) {
-      const errText = await response.text();
-      return res.status(502).json({ error: 'Greska OpenRouter servisa (' + response.status + '): ' + errText.slice(0, 300) });
+      return res.status(502).json({ error: 'Greska OpenRouter servisa (' + response.status + '): ' + lastErrText.slice(0, 300) });
     }
 
     const data = await response.json();
