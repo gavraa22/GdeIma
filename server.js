@@ -6,10 +6,10 @@ const app = express();
 app.use(express.json({ limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 
-// Endpoint 1: prepoznavanje predmeta sa slike preko Gemini AI (besplatan tier)
+// Endpoint 1: prepoznavanje predmeta sa slike preko OpenRouter (besplatan model, bez kartice)
 app.post('/api/identify', async (req, res) => {
   try {
     const { imageBase64, mediaType } = req.body;
@@ -17,48 +17,47 @@ app.post('/api/identify', async (req, res) => {
     if (!imageBase64) {
       return res.status(400).json({ error: 'Nedostaje slika.' });
     }
-    if (!GEMINI_API_KEY) {
-      return res.status(500).json({ error: 'Server nije podesen: nedostaje GEMINI_API_KEY (proveri .env fajl ili podesavanja hostinga).' });
+    if (!OPENROUTER_API_KEY) {
+      return res.status(500).json({ error: 'Server nije podesen: nedostaje OPENROUTER_API_KEY (proveri .env fajl ili podesavanja hostinga).' });
     }
 
-    const prompt = 'Na slici se nalazi neki svakodnevni predmet (moze biti bilo sta: daljinski upravljac, tastatura, ceslja, solja, alat, odevni predmet, kuhinjski pribor, elektronika, obuca...). Identifikuj GLAVNI predmet, cak i ako je delimicno zaklonjen ili nije idealno uslikan. Odgovori ISKLJUCIVO validnim JSON objektom, bez markdown ograda, u sledecem obliku: {"name_sr": "kratak naziv predmeta na srpskom", "name_en": "short name in English", "category": "kategorija na srpskom", "search_terms_sr": "kratka fraza na srpskom pogodna za pretragu prodavnica koje prodaju taj predmet"}';
+    const prompt = 'Na slici se nalazi neki svakodnevni predmet (moze biti bilo sta: daljinski upravljac, tastatura, ceslja, solja, alat, odevni predmet, kuhinjski pribor, elektronika, obuca...). Identifikuj GLAVNI predmet, cak i ako je delimicno zaklonjen ili nije idealno uslikan. Odgovori ISKLJUCIVO validnim JSON objektom, bez markdown ograda i bez ikakvog teksta pre ili posle JSON-a, u sledecem obliku: {"name_sr": "kratak naziv predmeta na srpskom", "name_en": "short name in English", "category": "kategorija na srpskom", "search_terms_sr": "kratka fraza na srpskom pogodna za pretragu prodavnica koje prodaju taj predmet"}';
 
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + GEMINI_API_KEY, {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        'Authorization': 'Bearer ' + OPENROUTER_API_KEY,
+        'HTTP-Referer': 'https://gdeima.onrender.com',
+        'X-Title': 'GdeIma'
       },
       body: JSON.stringify({
-        contents: [{
+        model: 'meta-llama/llama-4-maverick:free',
+        messages: [{
           role: 'user',
-          parts: [
-            { inline_data: { mime_type: mediaType || 'image/jpeg', data: imageBase64 } },
-            { text: prompt }
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: 'data:' + (mediaType || 'image/jpeg') + ';base64,' + imageBase64 } }
           ]
-        }],
-        generationConfig: {
-          response_mime_type: 'application/json'
-        }
+        }]
       })
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      return res.status(502).json({ error: 'Greska Gemini servisa (' + response.status + '): ' + errText.slice(0, 300) });
+      return res.status(502).json({ error: 'Greska OpenRouter servisa (' + response.status + '): ' + errText.slice(0, 300) });
     }
 
     const data = await response.json();
-    const candidate = (data.candidates || [])[0];
-    const textPart = candidate && candidate.content && candidate.content.parts
-      ? candidate.content.parts.find(p => p.text)
+    const rawText = data.choices && data.choices[0] && data.choices[0].message
+      ? data.choices[0].message.content
       : null;
 
-    if (!textPart || !textPart.text) {
+    if (!rawText) {
       return res.status(502).json({ error: 'Prazan odgovor od modela.' });
     }
 
-    let cleaned = textPart.text.replace(/```json|```/g, '').trim();
+    let cleaned = rawText.replace(/```json|```/g, '').trim();
     const first = cleaned.indexOf('{');
     const last = cleaned.lastIndexOf('}');
     if (first !== -1 && last !== -1) cleaned = cleaned.slice(first, last + 1);
