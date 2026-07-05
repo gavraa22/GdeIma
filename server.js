@@ -23,9 +23,17 @@ app.post('/api/identify', async (req, res) => {
 
     const prompt = 'Na slici se nalazi neki svakodnevni predmet (moze biti bilo sta: daljinski upravljac, tastatura, ceslja, solja, alat, odevni predmet, kuhinjski pribor, elektronika, obuca...). Identifikuj GLAVNI predmet, cak i ako je delimicno zaklonjen ili nije idealno uslikan. Odgovori ISKLJUCIVO validnim JSON objektom, bez markdown ograda i bez ikakvog teksta pre ili posle JSON-a, u sledecem obliku: {"name_sr": "kratak naziv predmeta na srpskom", "name_en": "short name in English", "category": "kategorija na srpskom", "search_terms_sr": "kratka fraza na srpskom pogodna za pretragu prodavnica koje prodaju taj predmet"}';
 
-    // Prvo pitamo OpenRouter uzivo koji su TRENUTNO besplatni modeli sa podrskom za slike,
-    // umesto da nagadjamo fiksnu listu (besplatna lista se cesto menja).
-    let candidateModels = [];
+    // Prvo probamo POZNATE dobre vizuelne modele (izbegavamo da slucajno pogodimo
+    // moderation/safety-classifier model iz dinamicke liste)
+    let candidateModels = [
+      'qwen/qwen2.5-vl-72b-instruct:free',
+      'qwen/qwen2.5-vl-32b-instruct:free',
+      'meta-llama/llama-3.2-11b-vision-instruct:free',
+      'google/gemma-3-27b-it:free',
+      'meta-llama/llama-4-scout:free'
+    ];
+
+    // Kao dodatnu rezervu, pitamo OpenRouter uzivo za jos opcija (na kraju liste)
     try {
       const modelsResp = await fetch('https://openrouter.ai/api/v1/models', {
         headers: { 'Authorization': 'Bearer ' + OPENROUTER_API_KEY }
@@ -33,27 +41,21 @@ app.post('/api/identify', async (req, res) => {
       if (modelsResp.ok) {
         const modelsData = await modelsResp.json();
         const allModels = modelsData.data || [];
-        candidateModels = allModels
+        const dynamicOnes = allModels
           .filter(m => {
             const promptPrice = m.pricing && parseFloat(m.pricing.prompt || '1');
             const inputMods = (m.architecture && m.architecture.input_modalities) || [];
-            return promptPrice === 0 && inputMods.includes('image');
+            const idLower = (m.id || '').toLowerCase();
+            const looksLikeSafety = idLower.includes('guard') || idLower.includes('moderation') || idLower.includes('safety');
+            return promptPrice === 0 && inputMods.includes('image') && !looksLikeSafety;
           })
           .map(m => m.id)
-          .slice(0, 8);
+          .filter(id => !candidateModels.includes(id))
+          .slice(0, 5);
+        candidateModels = candidateModels.concat(dynamicOnes);
       }
     } catch (e) {
-      // ignorisi, koristimo fallback listu ispod
-    }
-
-    // Fallback lista za svaki slucaj ako uzivo pretraga ne uspe
-    if (candidateModels.length === 0) {
-      candidateModels = [
-        'qwen/qwen2.5-vl-72b-instruct:free',
-        'meta-llama/llama-4-scout:free',
-        'google/gemma-3-27b-it:free',
-        'meta-llama/llama-3.2-11b-vision-instruct:free'
-      ];
+      // ignorisi, vec imamo osnovnu listu iznad
     }
 
     let response = null;
