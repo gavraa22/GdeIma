@@ -23,15 +23,38 @@ app.post('/api/identify', async (req, res) => {
 
     const prompt = 'Na slici se nalazi neki svakodnevni predmet (moze biti bilo sta: daljinski upravljac, tastatura, ceslja, solja, alat, odevni predmet, kuhinjski pribor, elektronika, obuca...). Identifikuj GLAVNI predmet, cak i ako je delimicno zaklonjen ili nije idealno uslikan. Odgovori ISKLJUCIVO validnim JSON objektom, bez markdown ograda i bez ikakvog teksta pre ili posle JSON-a, u sledecem obliku: {"name_sr": "kratak naziv predmeta na srpskom", "name_en": "short name in English", "category": "kategorija na srpskom", "search_terms_sr": "kratka fraza na srpskom pogodna za pretragu prodavnica koje prodaju taj predmet"}';
 
-    // Lista besplatnih modela da probamo redom - free lista se cesto menja na OpenRouter-u,
-    // pa ako jedan vise nije besplatan/dostupan, automatski prelazimo na sledeci.
-    const candidateModels = [
-      'qwen/qwen2.5-vl-72b-instruct:free',
-      'meta-llama/llama-4-scout:free',
-      'google/gemma-3-27b-it:free',
-      'meta-llama/llama-3.2-11b-vision-instruct:free',
-      'meta-llama/llama-4-maverick:free'
-    ];
+    // Prvo pitamo OpenRouter uzivo koji su TRENUTNO besplatni modeli sa podrskom za slike,
+    // umesto da nagadjamo fiksnu listu (besplatna lista se cesto menja).
+    let candidateModels = [];
+    try {
+      const modelsResp = await fetch('https://openrouter.ai/api/v1/models', {
+        headers: { 'Authorization': 'Bearer ' + OPENROUTER_API_KEY }
+      });
+      if (modelsResp.ok) {
+        const modelsData = await modelsResp.json();
+        const allModels = modelsData.data || [];
+        candidateModels = allModels
+          .filter(m => {
+            const promptPrice = m.pricing && parseFloat(m.pricing.prompt || '1');
+            const inputMods = (m.architecture && m.architecture.input_modalities) || [];
+            return promptPrice === 0 && inputMods.includes('image');
+          })
+          .map(m => m.id)
+          .slice(0, 8);
+      }
+    } catch (e) {
+      // ignorisi, koristimo fallback listu ispod
+    }
+
+    // Fallback lista za svaki slucaj ako uzivo pretraga ne uspe
+    if (candidateModels.length === 0) {
+      candidateModels = [
+        'qwen/qwen2.5-vl-72b-instruct:free',
+        'meta-llama/llama-4-scout:free',
+        'google/gemma-3-27b-it:free',
+        'meta-llama/llama-3.2-11b-vision-instruct:free'
+      ];
+    }
 
     let response = null;
     let lastErrText = '';
@@ -60,7 +83,7 @@ app.post('/api/identify', async (req, res) => {
       if (response.ok) break;
 
       lastErrText = await response.text();
-      // Ako je model nedostupan (404) ili vise nije besplatan, probaj sledeci u listi
+      // Ako je model nedostupan/vise nije besplatan, probaj sledeci u listi
       if (response.status !== 404 && response.status !== 400) break;
     }
 
